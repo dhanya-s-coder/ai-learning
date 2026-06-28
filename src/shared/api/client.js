@@ -1,5 +1,10 @@
 const TOKEN_KEY = "ai-learning-auth-token";
 const REFRESH_TOKEN_KEY = "ai-learning-refresh-token";
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, "") || "";
+
+function buildApiUrl(path) {
+  return `${API_BASE_URL}${path}`;
+}
 
 function getToken() {
   return localStorage.getItem(TOKEN_KEY) || "";
@@ -41,7 +46,7 @@ async function request(path, options = {}) {
   });
 
   if (response.status === 401 && getRefreshToken() && !options.__retry) {
-    const refreshed = await fetch("/api/auth/refresh", {
+    const refreshed = await fetch(buildApiUrl("/api/auth/refresh"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ refreshToken: getRefreshToken() })
@@ -67,7 +72,7 @@ export const authApi = {
     setRefreshToken("");
   },
   async login(payload) {
-    const data = await request("/api/auth/login", {
+    const data = await request(buildApiUrl("/api/auth/login"), {
       method: "POST",
       body: JSON.stringify(payload)
     });
@@ -76,7 +81,7 @@ export const authApi = {
     return data;
   },
   async signup(payload) {
-    const data = await request("/api/auth/signup", {
+    const data = await request(buildApiUrl("/api/auth/signup"), {
       method: "POST",
       body: JSON.stringify(payload)
     });
@@ -85,59 +90,65 @@ export const authApi = {
     return data;
   },
   forgotPassword(payload) {
-    return request("/api/auth/forgot-password", {
+    return request(buildApiUrl("/api/auth/forgot-password"), {
       method: "POST",
       body: JSON.stringify(payload)
     });
   },
   resetPassword(payload) {
-    return request("/api/auth/reset-password", {
+    return request(buildApiUrl("/api/auth/reset-password"), {
       method: "POST",
       body: JSON.stringify(payload)
     });
   }
 };
 
+export function getAssetUrl(path) {
+  if (!path) return "";
+  if (/^https?:\/\//i.test(path)) return path;
+  return buildApiUrl(path);
+}
+
 export const documentsApi = {
-  bootstrap: () => request("/api/bootstrap"),
+  bootstrap: () => request(buildApiUrl("/api/bootstrap")),
   uploadDocument(formData) {
-    return request("/api/documents", { method: "POST", body: formData });
+    return request(buildApiUrl("/api/documents"), { method: "POST", body: formData });
   },
   renameDocument(documentId, title) {
-    return request(`/api/documents/${documentId}`, {
+    return request(buildApiUrl(`/api/documents/${documentId}`), {
       method: "PATCH",
       body: JSON.stringify({ title })
     });
   },
   deleteDocument(documentId) {
-    return request(`/api/documents/${documentId}`, { method: "DELETE" });
+    return request(buildApiUrl(`/api/documents/${documentId}`), { method: "DELETE" });
   },
   reprocessDocument(documentId) {
-    return request(`/api/documents/${documentId}/reprocess`, {
+    return request(buildApiUrl(`/api/documents/${documentId}/reprocess`), {
       method: "POST",
       body: JSON.stringify({})
     });
   },
   saveOcr(documentId, pages) {
-    return request(`/api/documents/${documentId}/ocr`, {
+    return request(buildApiUrl(`/api/documents/${documentId}/ocr`), {
       method: "PATCH",
       body: JSON.stringify({ pages })
     });
   },
   generateSummary(documentId) {
-    return request(`/api/documents/${documentId}/summary`, {
+    return request(buildApiUrl(`/api/documents/${documentId}/summary`), {
       method: "POST",
       body: JSON.stringify({})
     });
   },
   explainConcept(documentId, concept) {
-    return request(`/api/documents/${documentId}/explain`, {
+    return request(buildApiUrl(`/api/documents/${documentId}/explain`), {
       method: "POST",
       body: JSON.stringify({ concept })
     });
   },
   chat(documentId, message) {
-    return request(`/api/documents/${documentId}/chat`, {
+    return request(buildApiUrl(`/api/documents/${documentId}/chat`), {
       method: "POST",
       body: JSON.stringify({ message })
     });
@@ -146,48 +157,48 @@ export const documentsApi = {
 
 export const flashcardsApi = {
   generate(documentId, count = 8) {
-    return request(`/api/documents/${documentId}/flashcards`, {
+    return request(buildApiUrl(`/api/documents/${documentId}/flashcards`), {
       method: "POST",
       body: JSON.stringify({ count })
     });
   },
   review(setId, cardId, confidence) {
-    return request(`/api/flashcard-sets/${setId}/review`, {
+    return request(buildApiUrl(`/api/flashcard-sets/${setId}/review`), {
       method: "PATCH",
       body: JSON.stringify({ cardId, confidence })
     });
   },
   toggleStar(cardId) {
-    return request(`/api/flashcards/${cardId}/star`, {
+    return request(buildApiUrl(`/api/flashcards/${cardId}/star`), {
       method: "PATCH",
       body: JSON.stringify({})
     });
   },
   deleteSet(setId) {
-    return request(`/api/flashcard-sets/${setId}`, { method: "DELETE" });
+    return request(buildApiUrl(`/api/flashcard-sets/${setId}`), { method: "DELETE" });
   }
 };
 
 export const quizzesApi = {
   generate(documentId, difficulty, totalQuestions) {
-    return request(`/api/documents/${documentId}/quizzes`, {
+    return request(buildApiUrl(`/api/documents/${documentId}/quizzes`), {
       method: "POST",
       body: JSON.stringify({ difficulty, totalQuestions })
     });
   },
   start(quizId) {
-    return request(`/api/quizzes/${quizId}/start`, { method: "POST", body: JSON.stringify({}) });
+    return request(buildApiUrl(`/api/quizzes/${quizId}/start`), { method: "POST", body: JSON.stringify({}) });
   },
   answer(quizId, questionId, option) {
-    return request(`/api/quizzes/${quizId}/answer`, {
+    return request(buildApiUrl(`/api/quizzes/${quizId}/answer`), {
       method: "PATCH",
       body: JSON.stringify({ questionId, option })
     });
   },
   complete(quizId) {
-    return request(`/api/quizzes/${quizId}/complete`, { method: "POST", body: JSON.stringify({}) });
+    return request(buildApiUrl(`/api/quizzes/${quizId}/complete`), { method: "POST", body: JSON.stringify({}) });
   },
   retryWrong(quizId) {
-    return request(`/api/quizzes/${quizId}/retry-wrong`, { method: "POST", body: JSON.stringify({}) });
+    return request(buildApiUrl(`/api/quizzes/${quizId}/retry-wrong`), { method: "POST", body: JSON.stringify({}) });
   }
 };

@@ -1,4 +1,5 @@
 import { DOC_TABS, QUICK_PROMPTS } from "../../../shared/constants/app";
+import { getAssetUrl } from "../../../shared/api/client";
 import EmptyState from "../../../shared/ui/EmptyState";
 import MarkdownContent from "../../../shared/ui/MarkdownContent";
 import UploadForm from "../../../shared/ui/UploadForm";
@@ -214,7 +215,7 @@ function DocumentsPage(props) {
                   <h3>PDF Preview</h3>
                   <span>Stored on server</span>
                 </div>
-                <iframe title={selectedDocument.title} src={selectedDocument.previewUrl} className="pdf-frame" />
+                <iframe title={selectedDocument.title} src={getAssetUrl(selectedDocument.previewUrl)} className="pdf-frame" />
               </>
             )}
             {!selectedDocument.previewUrl && (
