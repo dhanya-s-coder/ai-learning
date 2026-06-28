@@ -608,7 +608,10 @@ function App() {
             handleUpload={handleUpload}
             uploading={busyAction === "upload"}
             uploadError={error}
+            onOpenDocuments={() => setAppState((current) => ({ ...current, activeNav: "documents" }))}
             onOpenFlashcards={() => setAppState((current) => ({ ...current, activeNav: "flashcards" }))}
+            onOpenQuizzes={() => setAppState((current) => ({ ...current, activeNav: "quizzes" }))}
+            onAskQuestion={() => setAppState((current) => ({ ...current, activeNav: "documents", activeDocTab: "chat" }))}
           />
         )}
 
@@ -653,6 +656,7 @@ function App() {
             allFlashcardSets={allFlashcardSets}
             onOpenStudy={handleOpenFlashcardStudy}
             onDeleteSet={handleDeleteFlashcardSet}
+            onReviewCard={handleReviewFlashcard}
             flashcardFilters={flashcardFilters}
             setFlashcardFilter={handleSetFlashcardFilter}
           />

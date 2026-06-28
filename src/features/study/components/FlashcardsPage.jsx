@@ -1,136 +1,234 @@
+import { useMemo, useState } from "react";
 import EmptyState from "../../../shared/ui/EmptyState";
-
-const FLASHCARD_FILTERS = [
-  { id: "all", label: "All" },
-  { id: "starred", label: "Starred" },
-  { id: "easy", label: "Easy" },
-  { id: "medium", label: "Medium" },
-  { id: "hard", label: "Hard" },
-  { id: "mastered", label: "Mastered" }
-];
-
-function getFilterCards(set, filter) {
-  if (filter === "all") return set.cards;
-  if (filter === "starred") return set.cards.filter((card) => card.starred);
-  return set.cards.filter((card) => (card.confidence || "new") === filter);
-}
 
 function getSetStats(set) {
   return {
     reviewed: set.cards.filter((card) => card.reviewed).length,
-    starred: set.cards.filter((card) => card.starred).length,
     mastered: set.cards.filter((card) => card.mastered).length,
     due: set.cards.filter((card) => !card.dueAt || new Date(card.dueAt).getTime() <= Date.now()).length
   };
 }
 
-function FlashcardsPage({ allFlashcardSets, onOpenStudy, onDeleteSet, flashcardFilters, setFlashcardFilter }) {
-  const totals = allFlashcardSets.reduce(
-    (accumulator, set) => {
-      const stats = getSetStats(set);
-      accumulator.cards += set.cards.length;
+function getDeckStats(deck) {
+  const cards = deck.sets.flatMap((set) => (set.cards || []).map((card) => ({ ...card, setId: set.id })));
+  const reviewed = cards.filter((card) => card.reviewed).length;
+  const mastered = cards.filter((card) => card.mastered).length;
+  const due = cards.filter((card) => !card.dueAt || new Date(card.dueAt).getTime() <= Date.now()).length;
+  const progress = cards.length ? Math.round((reviewed / cards.length) * 100) : 0;
+  return { cards, reviewed, mastered, due, progress };
+}
+
+function getCardId(card) {
+  return card?.id || card?._id || "";
+}
+
+function buildDecks(allFlashcardSets) {
+  const deckMap = new Map();
+  allFlashcardSets.forEach((set) => {
+    const key = set.documentId;
+    if (!deckMap.has(key)) {
+      deckMap.set(key, {
+        id: key,
+        title: set.documentTitle,
+        createdAt: set.createdAt,
+        sets: []
+      });
+    }
+    deckMap.get(key).sets.push(set);
+  });
+  return [...deckMap.values()];
+}
+
+function FlashcardsPage({ allFlashcardSets, onOpenStudy, onDeleteSet, onReviewCard, flashcardFilters, setFlashcardFilter }) {
+  const decks = useMemo(() => buildDecks(allFlashcardSets), [allFlashcardSets]);
+  const [selectedDeckId, setSelectedDeckId] = useState("");
+  const [cardIndexes, setCardIndexes] = useState({});
+  const selectedDeck = decks.find((deck) => deck.id === selectedDeckId) || decks[0] || null;
+  const primarySet = selectedDeck?.sets[0] || null;
+  const selectedFilter = primarySet ? flashcardFilters[primarySet.id] || "all" : "all";
+  const selectedStats = selectedDeck ? getDeckStats(selectedDeck) : { cards: [], reviewed: 0, mastered: 0, due: 0, progress: 0 };
+  const activeIndex = selectedDeck ? Math.min(cardIndexes[selectedDeck.id] || 0, Math.max(selectedStats.cards.length - 1, 0)) : 0;
+  const activeCard = selectedStats.cards[activeIndex] || null;
+  const totals = decks.reduce(
+    (accumulator, deck) => {
+      const stats = getDeckStats(deck);
+      accumulator.cards += stats.cards.length;
       accumulator.reviewed += stats.reviewed;
-      accumulator.starred += stats.starred;
-      accumulator.mastered += stats.mastered;
       accumulator.due += stats.due;
+      accumulator.mastered += stats.mastered;
       return accumulator;
     },
-    { cards: 0, reviewed: 0, starred: 0, mastered: 0, due: 0 }
+    { cards: 0, reviewed: 0, due: 0, mastered: 0 }
   );
+  const retentionRate = totals.cards ? Math.round((totals.reviewed / totals.cards) * 100) : 0;
+
+  function handleStudyDeck() {
+    const targetSetId = activeCard?.setId || primarySet?.id;
+    if (!selectedDeck || !targetSetId) return;
+    onOpenStudy(selectedDeck.id, targetSetId, selectedFilter);
+  }
+
+  function moveCard(direction) {
+    if (!selectedDeck || selectedStats.cards.length === 0) return;
+    setCardIndexes((current) => {
+      const currentIndex = current[selectedDeck.id] || 0;
+      const nextIndex =
+        direction === "next"
+          ? Math.min(currentIndex + 1, selectedStats.cards.length - 1)
+          : Math.max(currentIndex - 1, 0);
+      return { ...current, [selectedDeck.id]: nextIndex };
+    });
+  }
+
+  async function handleInlineReview(confidence) {
+    if (!activeCard || !onReviewCard) return;
+    const cardToReview = activeCard;
+    moveCard("next");
+    await onReviewCard(cardToReview.setId, getCardId(cardToReview), confidence);
+  }
 
   return (
-    <section className="page-grid">
-      <div className="card flashcards-hero">
-        <div className="card-head">
-          <div>
-            <h3>Flashcard Studio</h3>
-            <span>Pick a category, track progress, and launch a focused full-screen review session.</span>
-          </div>
-          <div className="flashcards-summary-pills">
-            <span>{allFlashcardSets.length} sets</span>
-            <span>{totals.cards} cards</span>
-            <span>{totals.due} due now</span>
-            <span>{totals.mastered} mastered</span>
-          </div>
+    <section className="flashcards-page">
+      <div className="flashcard-dashboard-stats">
+        <div className="dashboard-stat-card green">
+          <div className="stat-icon" aria-hidden="true">🗂️</div>
+          <div><span>Total Flashcards</span><strong>{totals.cards}</strong><small>Across all decks</small></div>
+        </div>
+        <div className="dashboard-stat-card blue">
+          <div className="stat-icon" aria-hidden="true">📘</div>
+          <div><span>Cards Studied</span><strong>{totals.reviewed}</strong><small>This week</small></div>
+        </div>
+        <div className="dashboard-stat-card violet">
+          <div className="stat-icon" aria-hidden="true">🎯</div>
+          <div><span>Retention Rate</span><strong>{retentionRate}%</strong><small>Good progress</small></div>
+        </div>
+        <div className="dashboard-stat-card amber">
+          <div className="stat-icon" aria-hidden="true">⏰</div>
+          <div><span>Due for Review</span><strong>{totals.due}</strong><small>Cards to revise</small></div>
+        </div>
+        <div className="dashboard-stat-card mint">
+          <div className="stat-icon" aria-hidden="true">🏆</div>
+          <div><span>Mastered Cards</span><strong>{totals.mastered}</strong><small>Well done</small></div>
         </div>
       </div>
 
-      <div className="flashcards-grid">
-        {allFlashcardSets.map((set) => {
-          const selectedFilter = flashcardFilters[set.id] || "all";
-          const filteredCards = getFilterCards(set, selectedFilter);
-          const stats = getSetStats(set);
-          return (
-            <div key={set.id} className="card flashcard-library-card">
-              <div className="set-head">
-                <div>
-                  <strong>{set.name}</strong>
-                  <span>{set.documentTitle}</span>
-                </div>
-                <div className="inline-actions">
-                  <button
-                    className="primary-btn"
-                    onClick={() => onOpenStudy(set.documentId, set.id, selectedFilter)}
-                    disabled={filteredCards.length === 0}
-                  >
-                    Study {filteredCards.length ? `${filteredCards.length} Cards` : "Unavailable"}
-                  </button>
-                  <button className="text-btn danger" onClick={() => onDeleteSet(set.documentId, set.id)}>
-                    Delete
-                  </button>
-                </div>
+      {decks.length === 0 ? (
+        <div className="card">
+          <EmptyState title="No flashcards yet" text="Generate flashcards from any document to see them here." />
+        </div>
+      ) : (
+        <div className="flashcards-workspace">
+          <aside className="flashcard-deck-sidebar">
+            <div className="card deck-list-card">
+              <div className="card-head">
+                <h3>Your Decks</h3>
+                <span>{decks.length} Decks</span>
               </div>
-
-              <div className="flashcard-overview-grid">
-                <div className="flashcard-overview-stat">
-                  <span>Progress</span>
-                  <strong>{set.progress}%</strong>
-                </div>
-                <div className="flashcard-overview-stat">
-                  <span>Reviewed</span>
-                  <strong>{stats.reviewed}</strong>
-                </div>
-                <div className="flashcard-overview-stat">
-                  <span>Due</span>
-                  <strong>{stats.due}</strong>
-                </div>
-                <div className="flashcard-overview-stat">
-                  <span>Starred</span>
-                  <strong>{stats.starred}</strong>
-                </div>
-              </div>
-
-              <div className="progress-track">
-                <span className="progress-fill" style={{ width: `${set.progress}%` }} />
-              </div>
-
-              <div className="filter-row">
-                {FLASHCARD_FILTERS.map((filter) => {
-                  const count = getFilterCards(set, filter.id).length;
+              <div className="deck-list">
+                {decks.map((deck) => {
+                  const stats = getDeckStats(deck);
                   return (
                     <button
-                      key={filter.id}
-                      className={selectedFilter === filter.id ? "chip active-chip" : "chip"}
-                      onClick={() => setFlashcardFilter(set.id, filter.id)}
+                      key={deck.id}
+                      className={selectedDeck?.id === deck.id ? "deck-item active" : "deck-item"}
+                      onClick={() => {
+                        setSelectedDeckId(deck.id);
+                        setCardIndexes((current) => ({ ...current, [deck.id]: current[deck.id] || 0 }));
+                      }}
                     >
-                      {filter.label} ({count})
+                      <div className="deck-icon" aria-hidden="true">📄</div>
+                      <div>
+                        <strong>{deck.title}</strong>
+                        <span>{deck.sets.length} set(s) • {stats.cards.length} cards</span>
+                      </div>
+                      <small>{stats.progress}%</small>
+                      <div className="deck-progress"><span style={{ width: `${stats.progress}%` }} /></div>
                     </button>
                   );
                 })}
               </div>
+            </div>
 
-              <div className="inline-meta">
-                <span>{filteredCards.length} cards in selected category</span>
-                <span>{stats.mastered} mastered</span>
+            <div className="card deck-progress-card">
+              <div className="card-head">
+                <h3>Deck Progress</h3>
+                <span>{selectedStats.progress}%</span>
+              </div>
+              <div className="deck-progress-layout">
+                <div className="deck-ring" style={{ "--progress": `${selectedStats.progress}%` }}>
+                  <strong>{selectedStats.progress}%</strong>
+                  <span>Completed</span>
+                </div>
+                <div className="deck-progress-legend">
+                  <span><b className="green-dot" /> Learned {selectedStats.reviewed}</span>
+                  <span><b className="amber-dot" /> Due now {selectedStats.due}</span>
+                  <span><b className="blue-dot" /> New {Math.max(selectedStats.cards.length - selectedStats.reviewed, 0)}</span>
+                </div>
+              </div>
+              <div className="due-card-list">
+                <strong>Due cards</strong>
+                {selectedStats.cards
+                  .filter((card) => !card.dueAt || new Date(card.dueAt).getTime() <= Date.now())
+                  .slice(0, 5)
+                  .map((card, index) => (
+                    <button
+                      key={getCardId(card) || index}
+                      onClick={() =>
+                        selectedDeck &&
+                        setCardIndexes((current) => ({
+                          ...current,
+                          [selectedDeck.id]: selectedStats.cards.findIndex((item) => getCardId(item) === getCardId(card))
+                        }))
+                      }
+                    >
+                      <span>{index + 1}</span>
+                      {card.question}
+                    </button>
+                  ))}
+                {selectedStats.due === 0 && <small>No cards are due right now.</small>}
               </div>
             </div>
-          );
-        })}
-      </div>
+          </aside>
 
-      {allFlashcardSets.length === 0 && (
-        <div className="card">
-          <EmptyState title="No flashcards yet" text="Generate flashcards from any document to see them here." />
+          <main className="card flashcard-review-panel">
+            <div className="flashcard-review-header">
+              <div>
+                <h3>{selectedDeck.title}</h3>
+                <span>{selectedStats.cards.length} cards</span>
+              </div>
+              <div className="inline-actions">
+                <button className="chip active-chip" onClick={handleStudyDeck}>
+                  Review Mode
+                </button>
+                {primarySet && (
+                  <button className="text-btn danger" onClick={() => onDeleteSet(selectedDeck.id, primarySet.id)}>
+                    Delete Deck
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div className="review-progress-line">
+              <span style={{ width: `${selectedStats.progress}%` }} />
+            </div>
+
+            <div className="flashcard-stage">
+              <button className="round-nav" onClick={() => moveCard("prev")} aria-label="Previous card">‹</button>
+              <div className="study-preview-card">
+                <div className="study-card-label">Question</div>
+                <button className="star-btn" aria-label="Star card">☆</button>
+                <h2>{activeCard?.question || "No card available in this deck."}</h2>
+                <div className="answer-hint">Card {activeIndex + 1} of {selectedStats.cards.length}</div>
+              </div>
+              <button className="round-nav" onClick={() => moveCard("next")} aria-label="Next card">›</button>
+            </div>
+
+            <div className="flashcard-review-actions">
+              <button className="review-hard" onClick={() => handleInlineReview("hard")} disabled={!activeCard}>✕ Don't Know</button>
+              <button className="review-medium" onClick={() => handleInlineReview("medium")} disabled={!activeCard}>● Unsure</button>
+              <button className="review-easy" onClick={() => handleInlineReview("easy")} disabled={!activeCard}>✓ I Know</button>
+            </div>
+          </main>
         </div>
       )}
     </section>

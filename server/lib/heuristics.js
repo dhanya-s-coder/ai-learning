@@ -1,5 +1,11 @@
 function normalizeWhitespace(text) {
-  return text.replace(/\s+/g, " ").replace(/\s([,.!?;:])/g, "$1").trim();
+  return text
+    .replace(/\bDr\.\s*Pranay Kumar Saha\s*\|\s*OOP-Java\b/gi, "")
+    .replace(/\bPranay Kumar Saha\s*\|\s*OOP-Java\b/gi, "")
+    .replace(/\s+\d{1,3}\s*$/gm, "")
+    .replace(/\s+/g, " ")
+    .replace(/\s([,.!?;:])/g, "$1")
+    .trim();
 }
 
 function splitSentences(text) {
@@ -38,8 +44,24 @@ function selectBestSentences(text, limit = 3) {
 }
 
 export function fallbackSummary(document) {
-  const sentences = selectBestSentences(document.content, 4);
-  return sentences.join(" ") || `${document.title} was uploaded successfully, but a richer summary could not be generated.`;
+  const keywords = getTopKeywords(document.content, 8);
+  const sentences = selectBestSentences(document.content, 8);
+  if (!sentences.length) {
+    return `# ${document.title}\n\n## **Summary**\n- The document was uploaded successfully, but readable text was too limited for a detailed summary.`;
+  }
+
+  const midpoint = Math.ceil(sentences.length / 2);
+  const firstGroup = sentences.slice(0, midpoint);
+  const secondGroup = sentences.slice(midpoint);
+  const keywordLine = keywords.length ? `\n\n## **Important Terms**\n${keywords.map((word) => `- ${word}`).join("\n")}` : "";
+
+  return `# ${document.title}
+
+## **Main Ideas**
+${firstGroup.map((sentence) => `- ${sentence}`).join("\n")}
+
+## **Revision Notes**
+${(secondGroup.length ? secondGroup : firstGroup.slice(0, 3)).map((sentence) => `- ${sentence}`).join("\n")}${keywordLine}`;
 }
 
 export function fallbackFlashcards(document, count = 8) {

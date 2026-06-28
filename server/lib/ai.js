@@ -41,6 +41,37 @@ function safeExcerpt(text, maxChars = 18000) {
   return text.length > maxChars ? `${text.slice(0, maxChars)}...` : text;
 }
 
+function cleanStudyText(text = "") {
+  return text
+    .replace(/\bDr\.\s*Pranay Kumar Saha\s*\|\s*OOP-Java\b/gi, "")
+    .replace(/\bPranay Kumar Saha\s*\|\s*OOP-Java\b/gi, "")
+    .replace(/\s+\d{1,3}\s*$/gm, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function buildSummaryContext(document, maxChars = 28000) {
+  const pages = Array.isArray(document.pages) ? document.pages.filter((page) => page.text?.trim()) : [];
+  if (!pages.length) return safeExcerpt(cleanStudyText(document.content || ""), maxChars);
+
+  const selectedIndexes = new Set([0, 1, pages.length - 2, pages.length - 1]);
+  const sampleCount = Math.min(8, pages.length);
+  for (let index = 0; index < sampleCount; index += 1) {
+    selectedIndexes.add(Math.floor((index * (pages.length - 1)) / Math.max(sampleCount - 1, 1)));
+  }
+
+  const excerpts = [...selectedIndexes]
+    .filter((index) => index >= 0 && index < pages.length)
+    .sort((a, b) => a - b)
+    .map((index) => {
+      const page = pages[index];
+      return `Page ${page.pageNumber}:\n${safeExcerpt(cleanStudyText(page.text), 1800)}`;
+    })
+    .join("\n\n");
+
+  return safeExcerpt(excerpts, maxChars);
+}
+
 function chunkText(text) {
   const normalized = text || "";
   const chunks = [];
@@ -70,38 +101,31 @@ async function generateJson(prompt) {
 }
 
 export async function generateSummary(document) {
-  const prompt = `Tum ek expert document analyst ho. Tumhare paas ek PDF document hai, tumhein iska poora content analyze karna hai aur ek Topic-wise Summary taiyar karni hai.
+  const prompt = `Tum ek expert study-notes writer ho. PDF slide deck ka extracted text noisy ho sakta hai: headers, footers, page numbers, broken code, aur repeated lecturer names ko ignore karo.
 
-Summary likhte waqt niche diye gaye rules ka dhyan rakho:
+Goal: student ke liye clean, topic-wise revision summary banao.
 
-1. Topic Headings: Har bade topic ko ek clear aur bold heading do.
-2. Bullet Points: Har topic ke andar jo important points hain, unhein bullet points mein likho.
-3. Concise & Clear: Faltu ki baatein mat likhna, sirf kaam ki information aur core concepts summarize karna.
-4. Formatting: Markdown ka use karo (Bold, Italics, Lists) taaki summary dekhne mein organized lage.
-5. Flow: Summary ka flow logical hona chahiye, shuruat se lekar ant tak.
-6. Agar document mein multiple sections ya units hain, unhein properly group karo.
+Rules:
+- Raw extracted text ko copy-paste mat karo.
+- Code snippets ko sirf tab include karo jab concept samjhane ke liye zaruri ho; long code blocks avoid karo.
+- Har topic ke under 3-5 short bullets do.
+- Important OOP/programming terms ko clearly explain karo.
+- Output 5-8 meaningful sections se zyada na ho.
+- Agar content slides/classes/examples ke form me hai, unhe concepts me group karo, page order ke random fragments me nahi.
+- Markdown clean rakho: headings + bullets. Koi disclaimer ya intro line nahi.
 
 Output format:
 
 # ${document.title}
 
-## **Topic Name 1**
-- Point A
-- Point B
-
-## **Topic Name 2**
-- Point A
-- Point B
-
-Summary ko student-friendly rakho aur structured markdown mein do.
-Koi introductory line, disclaimer, ya extra explanation mat do.
-Sirf clean markdown output do.
-Har heading meaningful ho, generic headings jaise "Overview" ya "Conclusion" tabhi use karo jab document mein waise clear section ho.
-Bullet points short, factual, aur exam-revision friendly hone chahiye.
+## **Core Topic**
+- Short, useful point.
+- Short, useful point.
 
 Title: ${document.title}
-Document text:
-${safeExcerpt(document.content)}`;
+Pages: ${document.pageCount || "unknown"}
+Sampled page text:
+${buildSummaryContext(document)}`;
 
   try {
     return await generateText(prompt);

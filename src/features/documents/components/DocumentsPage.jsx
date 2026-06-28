@@ -12,6 +12,22 @@ const FLASHCARD_FILTERS = [
   { id: "mastered", label: "Mastered" }
 ];
 
+const DOC_STATS = [
+  { key: "documents", label: "Total Documents", hint: "Uploaded files", icon: "📄", tone: "green" },
+  { key: "pages", label: "Pages", hint: "Extracted pages", icon: "📘", tone: "blue" },
+  { key: "queries", label: "AI Queries", hint: "This document", icon: "💬", tone: "violet" },
+  { key: "flashcards", label: "Flashcards", hint: "Created", icon: "🗂️", tone: "amber" },
+  { key: "quizzes", label: "Quizzes", hint: "Taken", icon: "📝", tone: "mint" }
+];
+
+const TAB_ICONS = {
+  content: "📖",
+  chat: "💬",
+  actions: "✨",
+  flashcards: "🗂️",
+  quizzes: "📝"
+};
+
 function getFilterCards(set, filter) {
   if (filter === "all") return set.cards;
   if (filter === "starred") return set.cards.filter((card) => card.starred);
@@ -61,111 +77,154 @@ function DocumentsPage(props) {
     setFlashcardFilter
   } = props;
 
+  const selectedFlashcards = selectedDocument.flashcardSets.reduce(
+    (count, set) => count + set.cards.length,
+    0
+  );
+  const selectedAiQueries = selectedDocument.chat.filter((message) => message.role === "user").length;
+  const uploadHistory = selectedDocument.uploadHistory || [];
+  const docStatValues = {
+    documents: appState.documents.length,
+    pages: selectedDocument.pageCount || 0,
+    queries: selectedAiQueries,
+    flashcards: selectedFlashcards,
+    quizzes: selectedDocument.quizzes.length
+  };
+
   return (
-    <section className="documents-layout">
-      <div className="card">
-        <div className="card-head">
-          <h3>My Documents</h3>
-          <span>{appState.documents.length} files</span>
-        </div>
-        <UploadForm
-          uploadForm={uploadForm}
-          setUploadForm={setUploadForm}
-          handleUpload={handleUpload}
-          compact
-          uploading={uploading}
-          uploadError={uploadError}
-        />
-        <div className="document-list">
-          {appState.documents.map((document) => (
-            <button
-              key={document.id}
-              className={selectedDocument.id === document.id ? "document-item active" : "document-item"}
-              onClick={() => setAppState((current) => ({ ...current, selectedDocumentId: document.id, activeDocTab: "content" }))}
-            >
-              <div>
-                <strong>{document.title}</strong>
-                <span>
-                  {document.filename} | {document.sizeLabel}
-                </span>
-              </div>
-              <small>{document.uploadedAt || document.createdAt}</small>
-            </button>
-          ))}
-        </div>
+    <section className="documents-page">
+      <div className="document-stats-grid">
+        {DOC_STATS.map((stat) => (
+          <div key={stat.key} className={`document-stat-card ${stat.tone}`}>
+            <div className="stat-icon" aria-hidden="true">{stat.icon}</div>
+            <div>
+              <span>{stat.label}</span>
+              <strong>{docStatValues[stat.key]}</strong>
+              <small>{stat.hint}</small>
+            </div>
+          </div>
+        ))}
       </div>
 
-      <div className="workspace-layout">
-        <div className="workspace-header card">
-          <div>
-            <span className="eyebrow">Selected Document</span>
-            <h2>{selectedDocument.title}</h2>
-            <p>
-              {selectedDocument.pageCount} pages extracted. Status: {selectedDocument.status}. Topic hints: {selectedDocument.keywords?.slice(0, 5).join(", ") || selectedDocument.topic}
-            </p>
+      <div className="documents-layout">
+        <div className="documents-side-stack">
+          <div className="card documents-upload-card">
+            <div className="card-head">
+              <h3>My Documents</h3>
+              <span>{appState.documents.length} files</span>
+            </div>
+            <UploadForm
+              uploadForm={uploadForm}
+              setUploadForm={setUploadForm}
+              handleUpload={handleUpload}
+              compact
+              uploading={uploading}
+              uploadError={uploadError}
+            />
+            <div className="document-list">
+              {appState.documents.map((document) => (
+                <button
+                  key={document.id}
+                  className={selectedDocument.id === document.id ? "document-item active" : "document-item"}
+                  onClick={() => setAppState((current) => ({ ...current, selectedDocumentId: document.id, activeDocTab: "content" }))}
+                >
+                  <div className="file-icon" aria-hidden="true">PDF</div>
+                  <div>
+                    <strong>{document.title}</strong>
+                    <span>
+                      {document.filename} | {document.sizeLabel}
+                    </span>
+                  </div>
+                  <small>{document.pageCount || 0} pages</small>
+                </button>
+              ))}
+            </div>
           </div>
-          <div className="workspace-badges">
-            <span>{selectedDocument.flashcardSets.length} sets</span>
-            <span>{selectedDocument.quizzes.length} quizzes</span>
-            <button className="chip" onClick={() => handleRenameDocument(selectedDocument)}>
-              Rename
-            </button>
-            <button className="chip" onClick={() => handleReprocessDocument(selectedDocument.id)}>
-              Reprocess
-            </button>
-            <button className="chip" onClick={() => handleDeleteDocument(selectedDocument.id)}>
-              Delete
-            </button>
+
+          <div className="card upload-history-card">
+            <div className="card-head">
+              <h3>Upload History</h3>
+              <span>{uploadHistory.length} events</span>
+            </div>
+            <div className="upload-history-list">
+              {uploadHistory.map((item) => (
+                <div key={item._id || item.id} className="history-item">
+                  <div>
+                    <strong>{item.event}</strong>
+                    <span>{item.detail}</span>
+                  </div>
+                  <time>{item.createdAt ? new Date(item.createdAt).toLocaleString() : ""}</time>
+                </div>
+              ))}
+              {uploadHistory.length === 0 && (
+                <div className="history-item">
+                  <div>
+                    <strong>No history yet</strong>
+                    <span>Upload events will appear here.</span>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
-        <div className="card">
-          <div className="tab-bar">
+        <div className="workspace-layout selected-document-card card">
+          <div className="workspace-header">
+            <div>
+              <span className="eyebrow">Selected Document</span>
+              <h2>{selectedDocument.title}</h2>
+              <p>
+                {selectedDocument.pageCount || 0} pages extracted. Status: {selectedDocument.status || "ready"}.
+                Topic hints: {selectedDocument.keywords?.slice(0, 5).join(", ") || selectedDocument.topic}
+              </p>
+            </div>
+            <div className="workspace-badges">
+              <span>{selectedDocument.flashcardSets.length} sets</span>
+              <span>{selectedDocument.quizzes.length} quizzes</span>
+              <button className="chip" onClick={() => handleRenameDocument(selectedDocument)}>
+                ✏️ Rename
+              </button>
+              <button className="chip" onClick={() => handleReprocessDocument(selectedDocument.id)}>
+                🔄 Reprocess
+              </button>
+              <button className="chip danger-chip" onClick={() => handleDeleteDocument(selectedDocument.id)}>
+                🗑️ Delete
+              </button>
+            </div>
+          </div>
+
+          <div className="tab-bar document-tab-bar">
             {DOC_TABS.map((tab) => (
               <button
                 key={tab.id}
                 className={appState.activeDocTab === tab.id ? "chip active-chip" : "chip"}
                 onClick={() => setAppState((current) => ({ ...current, activeDocTab: tab.id }))}
               >
+                <span aria-hidden="true">{TAB_ICONS[tab.id] || "•"}</span>
                 {tab.label}
               </button>
             ))}
           </div>
-        </div>
 
         {appState.activeDocTab === "content" && (
-          <div className="tabbed-grid single-column">
+          <div className="document-tab-panel">
             {selectedDocument.previewUrl && (
-              <div className="card panel-card">
+              <>
                 <div className="card-head">
                   <h3>PDF Preview</h3>
                   <span>Stored on server</span>
                 </div>
                 <iframe title={selectedDocument.title} src={selectedDocument.previewUrl} className="pdf-frame" />
-              </div>
+              </>
             )}
-            <div className="card panel-card">
-              <div className="card-head">
-                <h3>Upload History</h3>
-                <span>{selectedDocument.uploadHistory?.length || 0} events</span>
-              </div>
-              <div className="global-list">
-                {(selectedDocument.uploadHistory || []).map((item) => (
-                  <div key={item._id || item.id} className="global-card">
-                    <div>
-                      <strong>{item.event}</strong>
-                      <span>{item.detail}</span>
-                    </div>
-                    <span>{item.createdAt ? new Date(item.createdAt).toLocaleString() : ""}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
+            {!selectedDocument.previewUrl && (
+              <EmptyState title="No preview available" text="Upload a PDF with a server preview and it will appear here." />
+            )}
           </div>
         )}
 
         {appState.activeDocTab === "chat" && (
-          <div className="card panel-card">
+          <div className="document-tab-panel">
             <div className="card-head">
               <h3>Chat With PDF</h3>
               <span>Answers use document-backed AI</span>
@@ -173,7 +232,7 @@ function DocumentsPage(props) {
             <div className="prompt-row">
               {QUICK_PROMPTS.map((prompt) => (
                 <button key={prompt} className="chip" onClick={() => handleQuickPrompt(prompt)}>
-                  {prompt}
+                  💡 {prompt}
                 </button>
               ))}
             </div>
@@ -195,8 +254,8 @@ function DocumentsPage(props) {
         )}
 
         {appState.activeDocTab === "actions" && (
-          <div className="tabbed-grid">
-            <div className="card panel-card">
+          <div className="tabbed-grid document-tab-panel">
+            <div className="action-panel">
               <div className="card-head">
                 <h3>Generate Summary</h3>
                 <span>AI summary</span>
@@ -204,12 +263,12 @@ function DocumentsPage(props) {
               <div className="action-item">
                 <MarkdownContent content={selectedDocument.summary} />
                 <button className="primary-btn" onClick={handleGenerateSummary}>
-                  Refresh Summary
+                  ✨ Refresh Summary
                 </button>
               </div>
             </div>
 
-            <div className="card panel-card">
+            <div className="action-panel">
               <div className="card-head">
                 <h3>Explain a Concept</h3>
                 <span>AI explanation</span>
@@ -219,7 +278,7 @@ function DocumentsPage(props) {
                 <div className="concept-row">
                   <input value={conceptInput} onChange={(event) => setConceptInput(event.target.value)} placeholder="Enter concept name" />
                   <button className="secondary-btn" onClick={handleExplainConcept}>
-                    Explain
+                    🔍 Explain
                   </button>
                 </div>
               </div>
@@ -228,14 +287,14 @@ function DocumentsPage(props) {
         )}
 
         {appState.activeDocTab === "flashcards" && (
-          <div className="card panel-card">
+          <div className="document-tab-panel">
             <div className="card-head">
               <h3>Flashcards</h3>
               <span>Study system with spaced review</span>
             </div>
             <div className="inline-actions">
               <button className="primary-btn" onClick={handleGenerateFlashcards}>
-                Generate Flashcards
+                🗂️ Generate Flashcards
               </button>
             </div>
             <div className="set-list">
@@ -258,10 +317,10 @@ function DocumentsPage(props) {
                           onClick={() => onOpenFlashcardStudy(selectedDocument.id, set.id, selectedFilter)}
                           disabled={filteredCards.length === 0}
                         >
-                          View Full Study Mode
+                          ▶️ View Full Study Mode
                         </button>
                         <button className="text-btn danger" onClick={() => handleDeleteFlashcardSet(selectedDocument.id, set.id)}>
-                          Delete set
+                          🗑️ Delete set
                         </button>
                       </div>
                     </div>
@@ -311,7 +370,7 @@ function DocumentsPage(props) {
         )}
 
         {appState.activeDocTab === "quizzes" && (
-          <div className="card panel-card">
+          <div className="document-tab-panel">
             <div className="card-head">
               <h3>Quizzes</h3>
               <span>One-question-at-a-time workflow</span>
@@ -336,7 +395,7 @@ function DocumentsPage(props) {
                 />
               </label>
               <button className="primary-btn" onClick={handleGenerateQuiz}>
-                Generate Quiz
+                📝 Generate Quiz
               </button>
             </div>
 
@@ -354,13 +413,13 @@ function DocumentsPage(props) {
                   </div>
                   <div className="inline-actions">
                     <button className="chip" onClick={() => handleStartQuiz(quiz.id)}>
-                      Start Quiz
+                      ▶️ Start Quiz
                     </button>
                     <button className="chip" onClick={() => handleCompleteQuiz(quiz.id)}>
-                      Finish
+                      ✅ Finish
                     </button>
                     <button className="chip" onClick={() => handleRetryWrongQuiz(quiz.id)}>
-                      Retry Wrong
+                      🔁 Retry Wrong
                     </button>
                   </div>
                   {quiz.status === "completed" ? (
@@ -414,6 +473,7 @@ function DocumentsPage(props) {
             </div>
           </div>
         )}
+        </div>
       </div>
     </section>
   );
